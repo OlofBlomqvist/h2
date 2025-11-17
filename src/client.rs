@@ -142,6 +142,7 @@ use crate::proto::{self, Error};
 use crate::{FlowControl, PingPong, RecvStream, SendStream};
 
 use bytes::{Buf, Bytes};
+use http::header::HOST;
 use http::{uri, HeaderMap, Method, Request, Response, Version};
 use std::fmt;
 use std::future::Future;
@@ -1598,12 +1599,15 @@ impl Peer {
             Parts {
                 method,
                 uri,
-                headers,
+                mut headers,
                 version,
                 ..
             },
             _,
         ) = request.into_parts();
+
+        // should not send host header - only authority psuedo header.
+        _ = headers.remove(HOST);
 
         // Build the set pseudo header set. All requests will include `method`
         // and `path`.
@@ -1621,7 +1625,7 @@ impl Peer {
                 pseudo.set_scheme(scheme);
             }
 
-            if let Some(authority) = overrides.authority { 
+            if let Some(authority) = overrides.authority {
                 pseudo.set_authority(authority);
             }
 
