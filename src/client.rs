@@ -1612,7 +1612,6 @@ impl Peer {
             .and_then(|overrides| overrides.protocol.clone())
             .or(protocol);
         let mut pseudo = Pseudo::request(method, uri, protocol);
-        tracing::error!("ALSDKJLKASDJFLKSJDFLKSJDFLKSJDFSDFSDSDF");
         if let Some(overrides) = pseudo_overrides {
             if let Some(method) = overrides.method {
                 pseudo.method = Some(method);
@@ -1622,8 +1621,7 @@ impl Peer {
                 pseudo.set_scheme(scheme);
             }
 
-            if let Some(authority) = overrides.authority {
-                tracing::warn!("h2 overriding authority psuedo-header to {:?}",authority);
+            if let Some(authority) = overrides.authority { 
                 pseudo.set_authority(authority);
             }
 
