@@ -3,6 +3,7 @@
 use crate::hpack::BytesStr;
 
 use bytes::Bytes;
+use http::{uri, Method};
 use std::fmt;
 
 /// Represents the `:protocol` pseudo-header used by
@@ -51,5 +52,64 @@ impl AsRef<[u8]> for Protocol {
 impl fmt::Debug for Protocol {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.value.fmt(f)
+    }
+}
+
+/// Allows overriding the request pseudo headers before a `Request` is encoded.
+#[derive(Clone, Debug, Default)]
+pub struct PseudoHeadersOverride {
+    pub(crate) method: Option<Method>,
+    pub(crate) scheme: Option<uri::Scheme>,
+    pub(crate) authority: Option<BytesStr>,
+    pub(crate) path: Option<BytesStr>,
+    pub(crate) protocol: Option<Protocol>,
+}
+
+impl PseudoHeadersOverride {
+    /// Creates an empty override set.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Overrides the `:method` pseudo header.
+    pub fn set_method(mut self, method: Method) -> Self {
+        self.method = Some(method);
+        self
+    }
+
+    /// Overrides the `:scheme` pseudo header.
+    pub fn set_scheme(mut self, scheme: uri::Scheme) -> Self {
+        self.scheme = Some(scheme);
+        self
+    }
+
+    /// Overrides the `:authority` pseudo header using a parsed authority.
+    pub fn set_authority(mut self, authority: uri::Authority) -> Self {
+        self.authority = Some(BytesStr::from(authority.as_str()));
+        self
+    }
+
+    /// Overrides the `:authority` pseudo header using a raw string value.
+    pub fn set_authority_str(mut self, authority: &str) -> Self {
+        self.authority = Some(BytesStr::from(authority));
+        self
+    }
+
+    /// Overrides the `:path` pseudo header from a parsed path and query.
+    pub fn set_path_and_query(mut self, path: uri::PathAndQuery) -> Self {
+        self.path = Some(BytesStr::from(path.as_str()));
+        self
+    }
+
+    /// Overrides the `:path` pseudo header using a raw string value.
+    pub fn set_path(mut self, path: impl AsRef<str>) -> Self {
+        self.path = Some(BytesStr::from(path.as_ref()));
+        self
+    }
+
+    /// Overrides the `:protocol` pseudo header (RFC 8441 extended CONNECT).
+    pub fn set_protocol(mut self, protocol: Protocol) -> Self {
+        self.protocol = Some(protocol);
+        self
     }
 }

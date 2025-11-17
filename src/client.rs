@@ -136,7 +136,7 @@
 //! [`Error`]: ../struct.Error.html
 
 use crate::codec::{Codec, SendError, UserError};
-use crate::ext::Protocol;
+use crate::ext::{Protocol, PseudoHeadersOverride};
 use crate::frame::{Headers, Pseudo, Reason, Settings, StreamId};
 use crate::proto::{self, Error};
 use crate::{FlowControl, PingPong, RecvStream, SendStream};
@@ -1589,6 +1589,7 @@ impl Peer {
         id: StreamId,
         request: Request<()>,
         protocol: Option<Protocol>,
+        pseudo_overrides: Option<PseudoHeadersOverride>,
         end_of_stream: bool,
     ) -> Result<Headers, SendError> {
         use http::request::Parts;
@@ -1604,11 +1605,38 @@ impl Peer {
             _,
         ) = request.into_parts();
 
-        let is_connect = method == Method::CONNECT;
-
         // Build the set pseudo header set. All requests will include `method`
         // and `path`.
+        let protocol = pseudo_overrides
+            .as_ref()
+            .and_then(|overrides| overrides.protocol.clone())
+            .or(protocol);
         let mut pseudo = Pseudo::request(method, uri, protocol);
+        tracing::error!("ALSDKJLKASDJFLKSJDFLKSJDFLKSJDFSDFSDSDF");
+        if let Some(overrides) = pseudo_overrides {
+            if let Some(method) = overrides.method {
+                pseudo.method = Some(method);
+            }
+
+            if let Some(scheme) = overrides.scheme {
+                pseudo.set_scheme(scheme);
+            }
+
+            if let Some(authority) = overrides.authority {
+                tracing::warn!("h2 overriding authority psuedo-header to {:?}",authority);
+                pseudo.set_authority(authority);
+            }
+
+            if let Some(path) = overrides.path {
+                pseudo.path = Some(path);
+            }
+
+            if let Some(protocol) = overrides.protocol {
+                pseudo.protocol = Some(protocol);
+            }
+        }
+
+        let is_connect = matches!(pseudo.method, Some(ref m) if *m == Method::CONNECT);
 
         if pseudo.scheme.is_none() {
             // If the scheme is not set, then there are a two options.
@@ -1689,5 +1717,46 @@ impl proto::Peer for Peer {
         *response.headers_mut() = fields;
 
         Ok(response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pseudo_overrides_are_applied() {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("https://example.com/base")
+            .body(())
+            .unwrap();
+
+        let overrides = PseudoHeadersOverride::new()
+            .set_method(Method::POST)
+            .set_scheme(uri::Scheme::HTTP)
+            .set_authority_str("override.example.com")
+            .set_path("/custom-path")
+            .set_protocol(Protocol::from_static("test-proto"));
+
+        let headers = Peer::convert_send_message(
+            StreamId::from(1),
+            request,
+            None,
+            Some(overrides),
+            true,
+        )
+        .expect("pseudo overrides should succeed");
+
+        let (pseudo, _) = headers.into_parts();
+
+        assert_eq!(pseudo.method, Some(Method::POST));
+        assert_eq!(pseudo.scheme.unwrap().as_ref(), b"http");
+        assert_eq!(
+            pseudo.authority.unwrap().as_ref(),
+            b"override.example.com"
+        );
+        assert_eq!(pseudo.path.unwrap().as_ref(), b"/custom-path");
+        assert_eq!(pseudo.protocol.unwrap().as_str(), "test-proto");
     }
 }
